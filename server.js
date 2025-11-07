@@ -1,71 +1,71 @@
-// server.js - Starter Express server for Week 2 assignment
+// server.js - Enhanced Express server for Week 2 assignment
 
-// Import required modules
 const express = require('express');
 const bodyParser = require('body-parser');
-const { v4: uuidv4 } = require('uuid');
+const dotenv = require('dotenv');
+const mongoose = require('mongoose');
+const path = require('path');
 
-// Initialize Express app
-const app = express();
+dotenv.config();
+
 const PORT = process.env.PORT || 3000;
 
-// Middleware setup
+const logger = require('./src/middleware/logger');
+const booksRouter = require('./src/routes/books');
+const ApiError = require('./src/errors/ApiError');
+
+const app = express();
+
+// Built-in and third-party middleware
 app.use(bodyParser.json());
+app.use(logger);
 
-// Sample in-memory products database
-let products = [
-  {
-    id: '1',
-    name: 'Laptop',
-    description: 'High-performance laptop with 16GB RAM',
-    price: 1200,
-    category: 'electronics',
-    inStock: true
-  },
-  {
-    id: '2',
-    name: 'Smartphone',
-    description: 'Latest model with 128GB storage',
-    price: 800,
-    category: 'electronics',
-    inStock: true
-  },
-  {
-    id: '3',
-    name: 'Coffee Maker',
-    description: 'Programmable coffee maker with timer',
-    price: 50,
-    category: 'kitchen',
-    inStock: false
-  }
-];
-
-// Root route
+// Root
 app.get('/', (req, res) => {
-  res.send('Welcome to the Product API! Go to /api/products to see all products.');
+  res.send('Welcome to the Book API! Use /api/books for the book endpoints.');
 });
 
-// TODO: Implement the following routes:
-// GET /api/products - Get all products
-// GET /api/products/:id - Get a specific product
-// POST /api/products - Create a new product
-// PUT /api/products/:id - Update a product
-// DELETE /api/products/:id - Delete a product
+// API routes - mount books router
+app.use('/api/books', booksRouter);
 
-// Example route implementation for GET /api/products
-app.get('/api/products', (req, res) => {
-  res.json(products);
+// 404 handler for unknown routes
+app.use((req, res, next) => {
+  next(new ApiError(404, `Route ${req.method} ${req.originalUrl} not found`));
 });
 
-// TODO: Implement custom middleware for:
-// - Request logging
-// - Authentication
-// - Error handling
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+// Global error handler
+app.use((err, req, res, next) => {
+  const status = err.statusCode || 500;
+  const message = err.message || 'Internal Server Error';
+  res.status(status).json({
+    status: 'error',
+    statusCode: status,
+    message
+  });
 });
 
-// Export the app for testing purposes
-module.exports = app; 
+// Connect to MongoDB if MONGODB_URI provided
+const mongoUri = process.env.MONGODB_URI;
+if (mongoUri) {
+  mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => {
+      console.log('Connected to MongoDB');
+      app.listen(PORT, () => {
+        console.log(`Server is running on http://localhost:${PORT}`);
+      });
+    })
+    .catch(err => {
+      console.error('Failed to connect to MongoDB - falling back to in-memory store', err.message);
+      app.listen(PORT, () => {
+        console.log(`Server is running on http://localhost:${PORT}`);
+      });
+    });
+} else {
+  // No MongoDB configured; start server with in-memory store
+  console.log('No MONGODB_URI configured — using in-memory data store');
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
